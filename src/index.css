@@ -1,0 +1,64 @@
+@import url('https://fonts.googleapis.css2?family=Outfit:wght@300;400;600;800;900&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --bg-color: #0d0f12;
+  --bg-color-light: #161a1f;
+  --text-main: #ffffff;
+  --text-muted: #94a3b8;
+  --accent-color: #ff5a27;
+  --accent-hover: #ff7448;
+  --accent-secondary: #ffbd00;
+  
+  --font-heading: "Outfit", sans-serif;
+  --font-body: "Inter", sans-serif;
+}
+
+@layer base {
+
+  body {
+    @apply bg-[var(--bg-color)] text-[var(--text-main)] overflow-x-hidden antialiased;
+    font-family: var(--font-body);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading);
+    @apply font-extrabold leading-tight;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-[var(--accent-color)] text-white px-7 py-3 rounded-full font-semibold text-base border-none cursor-pointer transition-all duration-300;
+    font-family: var(--font-heading);
+    box-shadow: 0 4px 14px rgba(255, 90, 39, 0.4);
+  }
+
+  .btn-primary:hover {
+    @apply bg-[var(--accent-hover)] -translate-y-[2px];
+    box-shadow: 0 6px 20px rgba(255, 90, 39, 0.6);
+  }
+
+  .btn-primary:active {
+    @apply translate-y-0;
+  }
+
+  .nav-glass {
+    @apply bg-[#0d0f12]/70 backdrop-blur-md border-b border-white/5;
+  }
+}
+
+/* Base utility for hiding scrollbar visually but keeping scrollable */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-color-light);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
