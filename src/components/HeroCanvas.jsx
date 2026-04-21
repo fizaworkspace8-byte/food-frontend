@@ -1,83 +1,85 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, useScroll, useTransform, useMotionValueEvent } from 'framer-motion';
+import { useScroll, useMotionValueEvent } from 'framer-motion';
 
 const FRAME_COUNT = 210;
 
 const HeroCanvas = () => {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
-  const [images, setImages] = useState([]);
-  const [loaded, setLoaded] = useState(0);
-
-  // Performance Refs
+  
+  // PERFORMANCE REFS: Use Refs for anything that changes rapidly
+  const imagesRef = useRef([]); 
   const drawParamsRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const lastFrameIndexRef = useRef(-1);
-  const requestRef = useRef(null);
   const isRenderingRef = useRef(false);
   const isComponentInView = useRef(true);
+  
+  // STATE: Only use state for UI elements (like a loader)
+  const [isReady, setIsReady] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end end"]
   });
 
-  // 1. Intersection Observer to kill the engine when out of view
+  // 1. Setup Intersection Observer
   useEffect(() => {
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        isComponentInView.current = entry.isIntersecting;
-      },
+      ([entry]) => { isComponentInView.current = entry.isIntersecting; },
       { threshold: 0.01 }
     );
-
     if (containerRef.current) observer.observe(containerRef.current);
     return () => observer.disconnect();
   }, []);
 
-  // Preload Images
+  // 2. Optimized Preloader
   useEffect(() => {
-    const loadedImages = [];
     let loadedCount = 0;
+    const tempImages = [];
+
     for (let i = 1; i <= FRAME_COUNT; i++) {
       const img = new Image();
       const indexStr = i.toString().padStart(3, '0');
-      img.src = `/burger-frames/ezgif-frame-${indexStr}.png`;
-      const handleLoad = () => {
+      // Using the optimized webp files you generated
+      img.src = `/burger-frames/ezgif-frame-${indexStr}.webp`;
+      
+      img.onload = () => {
         loadedCount++;
-        if (loadedCount === FRAME_COUNT || loadedCount % 20 === 0) {
-          setLoaded(Math.floor((loadedCount / FRAME_COUNT) * 100));
+        setProgress(Math.floor((loadedCount / FRAME_COUNT) * 100));
+        if (loadedCount === FRAME_COUNT) {
+          imagesRef.current = tempImages;
+          setIsReady(true);
+          // Draw initial frame
+          renderFrame(0);
         }
       };
-      img.onload = handleLoad;
-      img.onerror = handleLoad;
-      loadedImages.push(img);
+      tempImages.push(img);
     }
-    setImages(loadedImages);
-    return () => requestRef.current && cancelAnimationFrame(requestRef.current);
   }, []);
 
-  // 2. Ultra-Smooth Render Logic
-  const renderFrame = (progress) => {
-    // Stop if out of view or already rendering
-    if (!isComponentInView.current || isRenderingRef.current) return;
+  // 3. Ultra-Fast Render Engine
+  const renderFrame = (scrollVal) => {
+    if (!isComponentInView.current || imagesRef.current.length === 0 || !canvasRef.current) return;
 
-    const frameIndex = Math.floor(progress * (FRAME_COUNT - 1));
+    const frameIndex = Math.floor(scrollVal * (FRAME_COUNT - 1));
+    
+    // Skip if we are already showing this frame
     if (frameIndex === lastFrameIndexRef.current) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas || images.length === 0) return;
+    // Skip if the GPU is still busy drawing the last request
+    if (isRenderingRef.current) return;
 
-    const img = images[frameIndex];
+    const img = imagesRef.current[frameIndex];
     if (!img || !img.complete) return;
 
     isRenderingRef.current = true;
 
-    requestRef.current = requestAnimationFrame(() => {
-      const ctx = canvas.getContext('2d', { alpha: false });
-
-      // Toggle smoothing: OFF for movement, ON for the very last frame
-      ctx.imageSmoothingEnabled = (progress === 1 || progress === 0);
-
+    requestAnimationFrame(() => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d', { alpha: false }); // Performance optimization
       const { x, y, width, height } = drawParamsRef.current;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -88,67 +90,73 @@ const HeroCanvas = () => {
     });
   };
 
+  // Listen to scroll changes
   useMotionValueEvent(scrollYProgress, "change", (latest) => {
     renderFrame(latest);
   });
 
+  // 4. Handle Sizing and DPR
   useEffect(() => {
     const updateDimensions = () => {
       const canvas = canvasRef.current;
-      if (!canvas || images.length === 0) return;
+      if (!canvas) return;
 
-      // Cap resolution to 1.5x for performance on 4K/Retina screens
+      // Cap at 1.5 to prevent memory crashes on high-res mobile screens
       const dpr = Math.min(window.devicePixelRatio, 1.5);
       canvas.width = window.innerWidth * dpr;
       canvas.height = window.innerHeight * dpr;
 
-      const img = images[0];
-      if (img && img.complete) {
-        const imgRatio = img.width / img.height;
-        const canvasRatio = canvas.width / canvas.height;
+      // Fit Image to Canvas (Cover logic)
+      const imgWidth = 1920; // Original width
+      const imgHeight = 1080; // Original height
+      const imgRatio = imgWidth / imgHeight;
+      const canvasRatio = canvas.width / canvas.height;
 
-        let drawWidth, drawHeight;
-        if (canvasRatio > imgRatio) {
-          drawWidth = canvas.width;
-          drawHeight = canvas.width / imgRatio;
-        } else {
-          drawHeight = canvas.height;
-          drawWidth = canvas.height * imgRatio;
-        }
-
-        const scale = window.innerWidth < 768 ? 0.85 : 1.05;
-        drawParamsRef.current = {
-          width: drawWidth * scale,
-          height: drawHeight * scale,
-          x: (canvas.width - drawWidth * scale) / 2,
-          y: (canvas.height - drawHeight * scale) / 2
-        };
+      let dW, dH;
+      if (canvasRatio > imgRatio) {
+        dW = canvas.width;
+        dH = canvas.width / imgRatio;
+      } else {
+        dH = canvas.height;
+        dW = canvas.height * imgRatio;
       }
+
+      drawParamsRef.current = {
+        width: dW,
+        height: dH,
+        x: (canvas.width - dW) / 2,
+        y: (canvas.height - dH) / 2
+      };
+
       renderFrame(scrollYProgress.get());
     };
 
-    window.addEventListener('resize', updateDimensions, { passive: true });
+    window.addEventListener('resize', updateDimensions);
     updateDimensions();
     return () => window.removeEventListener('resize', updateDimensions);
-  }, [images, loaded === 100]);
+  }, [isReady]);
 
   return (
-    <section
-      ref={containerRef}
-      className="relative h-[500vh] bg-[#0a0a0a]"
-      style={{ contain: 'strict' }} // Highest level of CSS isolation
+    <section 
+        ref={containerRef} 
+        className="relative h-[500vh] bg-[#0a0a0a]" 
+        style={{ contain: 'paint' }}
     >
-      <div className="sticky top-0 h-screen w-screen overflow-hidden">
+      {!isReady && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+          <span className="text-white font-mono text-2xl">COOKING... {progress}%</span>
+        </div>
+      )}
+      
+      <div className="sticky top-0 h-screen w-full overflow-hidden">
         <canvas
           ref={canvasRef}
-          className="w-full h-full object-cover"
+          className="w-full h-full block"
           style={{
             willChange: 'transform',
-            transform: 'translateZ(0)' // GPU acceleration
+            imageRendering: 'crisp-edges'
           }}
         />
-
-        {/* All text overlays remain here (titleOpacity, etc.) */}
       </div>
     </section>
   );
