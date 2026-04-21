@@ -7,14 +7,14 @@ const HeroCanvas = () => {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   
-  // PERFORMANCE REFS: Use Refs for anything that changes rapidly
+  // PERFORMANCE REFS
   const imagesRef = useRef([]); 
+  const ctxRef = useRef(null); // <-- NEW: Cache the context
   const drawParamsRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
   const lastFrameIndexRef = useRef(-1);
   const isRenderingRef = useRef(false);
   const isComponentInView = useRef(true);
   
-  // STATE: Only use state for UI elements (like a loader)
   const [isReady, setIsReady] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -41,16 +41,19 @@ const HeroCanvas = () => {
     for (let i = 1; i <= FRAME_COUNT; i++) {
       const img = new Image();
       const indexStr = i.toString().padStart(3, '0');
-      // Using the optimized webp files you generated
-      img.src = `/burger-frames-optimized/ezgif-frame-${indexStr}.webp`;
+      img.src = `/burger-frames/ezgif-frame-${indexStr}.webp`; // Ensure folder name matches your setup
       
       img.onload = () => {
         loadedCount++;
-        setProgress(Math.floor((loadedCount / FRAME_COUNT) * 100));
+        
+        // NEW: Throttle state updates to prevent React from freezing the main thread
+        if (loadedCount % 10 === 0 || loadedCount === FRAME_COUNT) {
+          setProgress(Math.floor((loadedCount / FRAME_COUNT) * 100));
+        }
+
         if (loadedCount === FRAME_COUNT) {
           imagesRef.current = tempImages;
           setIsReady(true);
-          // Draw initial frame
           renderFrame(0);
         }
       };
@@ -64,10 +67,7 @@ const HeroCanvas = () => {
 
     const frameIndex = Math.floor(scrollVal * (FRAME_COUNT - 1));
     
-    // Skip if we are already showing this frame
     if (frameIndex === lastFrameIndexRef.current) return;
-
-    // Skip if the GPU is still busy drawing the last request
     if (isRenderingRef.current) return;
 
     const img = imagesRef.current[frameIndex];
@@ -77,9 +77,17 @@ const HeroCanvas = () => {
 
     requestAnimationFrame(() => {
       const canvas = canvasRef.current;
-      if (!canvas) return;
+      if (!canvas) {
+        isRenderingRef.current = false;
+        return;
+      }
       
-      const ctx = canvas.getContext('2d', { alpha: false }); // Performance optimization
+      // NEW: Only get context once, drastically reducing CPU overhead per frame
+      if (!ctxRef.current) {
+        ctxRef.current = canvas.getContext('2d', { alpha: false });
+      }
+      const ctx = ctxRef.current;
+      
       const { x, y, width, height } = drawParamsRef.current;
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -90,25 +98,25 @@ const HeroCanvas = () => {
     });
   };
 
-  // Listen to scroll changes
   useMotionValueEvent(scrollYProgress, "change", (latest) => {
     renderFrame(latest);
   });
 
-  // 4. Handle Sizing and DPR
+  // 4. Handle Sizing
   useEffect(() => {
     const updateDimensions = () => {
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      // Cap at 1.5 to prevent memory crashes on high-res mobile screens
       const dpr = Math.min(window.devicePixelRatio, 1.5);
       canvas.width = window.innerWidth * dpr;
       canvas.height = window.innerHeight * dpr;
 
-      // Fit Image to Canvas (Cover logic)
-      const imgWidth = 1920; // Original width
-      const imgHeight = 1080; // Original height
+      // Force context recreation on resize
+      ctxRef.current = canvas.getContext('2d', { alpha: false });
+
+      const imgWidth = 1920; 
+      const imgHeight = 1080; 
       const imgRatio = imgWidth / imgHeight;
       const canvasRatio = canvas.width / canvas.height;
 

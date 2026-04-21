@@ -23,7 +23,6 @@ const articles = [
     id: 3,
     title: "Why Double Patties Are the Future",
     category: "Culture",
-    // FIXED: Updated image URL to a working asset
     image: "https://images.unsplash.com/photo-1553979459-d2229ba7433b?q=80&w=2864&auto=format&fit=crop",
     time: "4 min read",
     date: "Oct 08, 2024"
@@ -35,8 +34,7 @@ const ArticlesSection = () => {
     <section
       id="articles"
       className="py-32 px-[5%] bg-black relative z-10 border-t border-white/5"
-      // PERFORMANCE: Tells browser to skip rendering this until it's near the viewport
-      style={{ contentVisibility: 'auto', containmentIntrinsicSize: '0 1000px' }}
+      // REMOVED contentVisibility. The browser needs to paint this normally to avoid transition lag.
     >
       <div className="max-w-[1400px] w-full mx-auto">
         <div className="flex flex-col md:flex-row justify-between md:items-end gap-10 mb-20">
@@ -66,17 +64,17 @@ const ArticlesSection = () => {
               transition={{
                 duration: 0.6,
                 delay: index * 0.1,
-                ease: [0.215, 0.61, 0.355, 1] // Optimization: Use cubic-bezier for smoother GPU transitions
+                ease: [0.215, 0.61, 0.355, 1] 
               }}
               className="bg-[#0a0a0a] rounded-[2.5rem] overflow-hidden border border-white/5 hover:border-orange-500/20 transition-all group cursor-pointer"
-              // Force GPU layer to prevent Hero animation from stuttering
               style={{ transform: 'translateZ(0)', willChange: 'transform' }}
             >
               <div className="w-full h-[300px] overflow-hidden relative">
                 <img
                   src={article.image}
                   alt={article.title}
-                  loading="lazy" // PERFORMANCE: Don't load Journal images until the burger is done
+                  // PERFORMANCE: decode="async" forces the browser to decode this off the main thread so it doesn't freeze the canvas scroll. Removed lazy loading.
+                  decoding="async" 
                   className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
                 />
                 <div className="absolute top-8 left-8 bg-orange-500 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest italic text-white shadow-xl">
