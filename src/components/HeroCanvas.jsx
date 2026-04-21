@@ -41,7 +41,7 @@ const HeroCanvas = () => {
     for (let i = 1; i <= FRAME_COUNT; i++) {
       const img = new Image();
       const indexStr = i.toString().padStart(3, '0');
-      img.src = `/burger-frames/ezgif-frame-${indexStr}.webp`; // Ensure folder name matches your setup
+      img.src = `/burger-frames-optimized/ezgif-frame-${indexStr}.webp`; // Ensure folder name matches your setup
       
       img.onload = () => {
         loadedCount++;
