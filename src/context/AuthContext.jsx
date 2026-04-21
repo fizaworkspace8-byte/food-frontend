@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 
-const API = 'http://localhost:5000/api';
+const API = 'https://food-backend-gk58.onrender.com/api';
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {

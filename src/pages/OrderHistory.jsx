@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Package, ChevronDown, ChevronUp, Clock, CheckCircle2, Truck, MapPin, ShoppingBag, Wallet } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = 'https://food-backend-gk58.onrender.com/api';
 
 const statusConfig = {
   pending: { color: 'text-yellow-500', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', icon: Clock, label: 'Pending' },

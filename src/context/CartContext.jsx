@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import axios from 'axios';
 import { useAuth } from './AuthContext';
 
-const API = 'http://localhost:5000/api';
+const API = 'https://food-backend-gk58.onrender.com/api';
 const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {

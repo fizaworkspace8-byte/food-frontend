@@ -11,7 +11,7 @@ const Menu = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const res = await axios.get('http://localhost:5000/api/products');
+        const res = await axios.get('https://food-backend-gk58.onrender.com/api/products');
         setProducts(res.data);
       } catch (err) {
         console.error("Failed to fetch products", err);

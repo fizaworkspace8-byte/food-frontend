@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Wallet, Truck, ShieldCheck, ArrowRight, Trash2, Phone, Minus, Plus, Banknote, Smartphone } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = 'https://food-backend-gk58.onrender.com/api';
 
 const Checkout = () => {
   const { cart, subtotal, removeFromCart, updateQuantity, clearCart } = useCart();
