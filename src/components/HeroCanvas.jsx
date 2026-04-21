@@ -42,7 +42,7 @@ const HeroCanvas = () => {
       const img = new Image();
       const indexStr = i.toString().padStart(3, '0');
       // Using the optimized webp files you generated
-      img.src = `/burger-frames/ezgif-frame-${indexStr}.webp`;
+      img.src = `/burger-frames-optimized/ezgif-frame-${indexStr}.webp`;
       
       img.onload = () => {
         loadedCount++;
