@@ -6,12 +6,9 @@ const API = 'https://food-backend-gk58.onrender.com/api';
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState({ id: "123", name: "Developer", email: "dev@test.com" });
+  const [token, setToken] = useState("mock_token");
+  const [loading, setLoading] = useState(false);
 
   // Set up axios default header whenever token changes
   useEffect(() => {
@@ -25,7 +22,8 @@ export const AuthProvider = ({ children }) => {
     }
   }, [token]);
 
-  // Restore user session on app load
+  // Restore user session on app load (BYPASSED)
+  /*
   useEffect(() => {
     const restoreSession = async () => {
       if (token) {
@@ -45,6 +43,7 @@ export const AuthProvider = ({ children }) => {
     };
     restoreSession();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  */
 
   const login = async (email, password) => {
     const res = await axios.post(`${API}/auth/login`, { email, password });
