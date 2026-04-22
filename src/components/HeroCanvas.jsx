@@ -1,173 +1,128 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useScroll, useMotionValueEvent } from 'framer-motion';
 
-const FRAME_COUNT = 210;
-
-const HeroCanvas = () => {
+const HeroVideo = () => {
   const containerRef = useRef(null);
-  const canvasRef = useRef(null);
+  const videoRef = useRef(null);
   
   // PERFORMANCE REFS
-  const imagesRef = useRef([]); 
-  const ctxRef = useRef(null); // <-- NEW: Cache the context
-  const drawParamsRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
-  const lastFrameIndexRef = useRef(-1);
   const isRenderingRef = useRef(false);
-  const isComponentInView = useRef(true);
+  const lastTimeRef = useRef(-1);
   
   const [isReady, setIsReady] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [loadingError, setLoadingError] = useState(false);
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end end"]
   });
 
-  // 1. Setup Intersection Observer
+  // 1. Fetch Video as Blob for zero-latency scrubbing
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => { isComponentInView.current = entry.isIntersecting; },
-      { threshold: 0.01 }
-    );
-    if (containerRef.current) observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
+    const currentVideo = videoRef.current;
+    let objectUrl = null;
 
-  // 2. Optimized Preloader
-  useEffect(() => {
-    let loadedCount = 0;
-    const tempImages = [];
-
-    for (let i = 1; i <= FRAME_COUNT; i++) {
-      const img = new Image();
-      const indexStr = i.toString().padStart(3, '0');
-      img.src = `/burger-frames-optimized/ezgif-frame-${indexStr}.webp`; // Ensure folder name matches your setup
-      
-      img.onload = () => {
-        loadedCount++;
+    const loadVideo = async () => {
+      try {
+        // NOTE: Use the converted 'burger_scrub.mp4' for best performance
+        const response = await fetch('/burger-video/burger_scrub.mp4'); 
+        if (!response.ok) throw new Error('Video not found');
         
-        // NEW: Throttle state updates to prevent React from freezing the main thread
-        if (loadedCount % 10 === 0 || loadedCount === FRAME_COUNT) {
-          setProgress(Math.floor((loadedCount / FRAME_COUNT) * 100));
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        
+        if (currentVideo) {
+          currentVideo.src = objectUrl;
+          currentVideo.load();
         }
+      } catch (error) {
+        console.error("Error loading video:", error);
+        setLoadingError(true);
+      }
+    };
+    
+    loadVideo();
 
-        if (loadedCount === FRAME_COUNT) {
-          imagesRef.current = tempImages;
-          setIsReady(true);
-          renderFrame(0);
-        }
-      };
-      tempImages.push(img);
-    }
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
   }, []);
 
-  // 3. Ultra-Fast Render Engine
-  const renderFrame = (scrollVal) => {
-    if (!isComponentInView.current || imagesRef.current.length === 0 || !canvasRef.current) return;
-
-    const frameIndex = Math.floor(scrollVal * (FRAME_COUNT - 1));
-    
-    if (frameIndex === lastFrameIndexRef.current) return;
-    if (isRenderingRef.current) return;
-
-    const img = imagesRef.current[frameIndex];
-    if (!img || !img.complete) return;
-
-    isRenderingRef.current = true;
-
-    requestAnimationFrame(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) {
-        isRenderingRef.current = false;
-        return;
-      }
-      
-      // NEW: Only get context once, drastically reducing CPU overhead per frame
-      if (!ctxRef.current) {
-        ctxRef.current = canvas.getContext('2d', { alpha: false });
-      }
-      const ctx = ctxRef.current;
-      
-      const { x, y, width, height } = drawParamsRef.current;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, x, y, width, height);
-
-      lastFrameIndexRef.current = frameIndex;
-      isRenderingRef.current = false;
-    });
-  };
-
+  // 2. Optimized Scrubbing Engine
   useMotionValueEvent(scrollYProgress, "change", (latest) => {
-    renderFrame(latest);
+    const video = videoRef.current;
+    if (!video || !isReady || Number.isNaN(video.duration)) return;
+
+    // Map scroll (0-1) to video time
+    const targetTime = latest * video.duration;
+
+    // Avoid redundant updates and frame-skipping
+    if (!isRenderingRef.current && Math.abs(targetTime - lastTimeRef.current) > 0.01) {
+      isRenderingRef.current = true;
+      
+      requestAnimationFrame(() => {
+        if (video) {
+          video.currentTime = targetTime;
+          lastTimeRef.current = targetTime;
+        }
+        isRenderingRef.current = false;
+      });
+    }
   });
-
-  // 4. Handle Sizing
-  useEffect(() => {
-    const updateDimensions = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const dpr = Math.min(window.devicePixelRatio, 1.5);
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
-
-      // Force context recreation on resize
-      ctxRef.current = canvas.getContext('2d', { alpha: false });
-
-      const imgWidth = 1920; 
-      const imgHeight = 1080; 
-      const imgRatio = imgWidth / imgHeight;
-      const canvasRatio = canvas.width / canvas.height;
-
-      let dW, dH;
-      if (canvasRatio > imgRatio) {
-        dW = canvas.width;
-        dH = canvas.width / imgRatio;
-      } else {
-        dH = canvas.height;
-        dW = canvas.height * imgRatio;
-      }
-
-      drawParamsRef.current = {
-        width: dW,
-        height: dH,
-        x: (canvas.width - dW) / 2,
-        y: (canvas.height - dH) / 2
-      };
-
-      renderFrame(scrollYProgress.get());
-    };
-
-    window.addEventListener('resize', updateDimensions);
-    updateDimensions();
-    return () => window.removeEventListener('resize', updateDimensions);
-  }, [isReady]);
 
   return (
     <section 
-        ref={containerRef} 
-        className="relative h-[500vh] bg-[#0a0a0a]" 
-        style={{ contain: 'paint' }}
+      ref={containerRef} 
+      className="relative h-[500vh] bg-[#0a0a0a]" 
+      style={{ contain: 'paint' }}
     >
-      {!isReady && (
+      {/* Loading Overlay */}
+      {!isReady && !loadingError && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-          <span className="text-white font-mono text-2xl">COOKING... {progress}%</span>
+          <div className="flex flex-col items-center gap-4">
+            <span className="text-white font-mono text-2xl animate-pulse">
+              PREPARING YOUR ORDER...
+            </span>
+            <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
+              <div className="h-full bg-orange-500 animate-[loading_2s_ease-in-out_infinite]" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {loadingError && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+          <span className="text-red-500 font-mono">Failed to load burger assets.</span>
         </div>
       )}
       
-      <div className="sticky top-0 h-screen w-full overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full block"
+      {/* Video Container */}
+      <div className="sticky top-0 h-screen w-full overflow-hidden flex items-center justify-center">
+        <video
+          ref={videoRef}
+          className="w-full h-full object-cover pointer-events-none"
+          muted
+          playsInline
+          preload="auto"
+          onCanPlayThrough={() => setIsReady(true)}
           style={{
             willChange: 'transform',
-            imageRendering: 'crisp-edges'
+            filter: 'brightness(0.9)', // Optional: match your cafe vibe
           }}
         />
+      </div>
+
+      {/* Optional: Add content overlays here as you scroll */}
+      <div className="relative z-10 pointer-events-none">
+        <div className="h-screen flex items-center justify-center">
+            <h1 className="text-white text-7xl font-bold opacity-0">Scroll for the Sizzle</h1>
+        </div>
       </div>
     </section>
   );
 };
 
-export default React.memo(HeroCanvas);
+export default React.memo(HeroVideo);
