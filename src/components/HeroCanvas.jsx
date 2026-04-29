@@ -4,11 +4,11 @@ import { useScroll, useMotionValueEvent } from 'framer-motion';
 const HeroVideo = () => {
   const containerRef = useRef(null);
   const videoRef = useRef(null);
-  
+
   // PERFORMANCE REFS
   const isRenderingRef = useRef(false);
   const lastTimeRef = useRef(-1);
-  
+
   const [isReady, setIsReady] = useState(false);
   const [loadingError, setLoadingError] = useState(false);
 
@@ -25,12 +25,12 @@ const HeroVideo = () => {
     const loadVideo = async () => {
       try {
         // NOTE: Use the converted 'burger_scrub.mp4' for best performance
-        const response = await fetch('/burger-video/burger_scrub.mp4'); 
+        const response = await fetch('/burger-video/burger_scrub.mp4');
         if (!response.ok) throw new Error('Video not found');
-        
+
         const blob = await response.blob();
         objectUrl = URL.createObjectURL(blob);
-        
+
         if (currentVideo) {
           currentVideo.src = objectUrl;
           currentVideo.load();
@@ -40,7 +40,7 @@ const HeroVideo = () => {
         setLoadingError(true);
       }
     };
-    
+
     loadVideo();
 
     return () => {
@@ -61,7 +61,7 @@ const HeroVideo = () => {
     // Avoid redundant updates and frame-skipping
     if (!isRenderingRef.current && Math.abs(targetTime - lastTimeRef.current) > 0.01) {
       isRenderingRef.current = true;
-      
+
       requestAnimationFrame(() => {
         if (video) {
           video.currentTime = targetTime;
@@ -73,9 +73,9 @@ const HeroVideo = () => {
   });
 
   return (
-    <section 
-      ref={containerRef} 
-      className="relative h-[500vh] bg-[#0a0a0a]" 
+    <section
+      ref={containerRef}
+      className="relative h-[500vh] bg-[#0a0a0a]"
       style={{ contain: 'paint' }}
     >
       {/* Loading Overlay */}
@@ -98,7 +98,7 @@ const HeroVideo = () => {
           <span className="text-red-500 font-mono">Failed to load burger assets.</span>
         </div>
       )}
-      
+
       {/* Video Container */}
       <div className="sticky top-0 h-screen w-full overflow-hidden flex items-center justify-center">
         <video
@@ -118,7 +118,7 @@ const HeroVideo = () => {
       {/* Optional: Add content overlays here as you scroll */}
       <div className="relative z-10 pointer-events-none">
         <div className="h-screen flex items-center justify-center">
-            <h1 className="text-white text-7xl font-bold opacity-0">Scroll for the Sizzle</h1>
+          <h1 className="text-white text-7xl font-bold opacity-0">Scroll for the Sizzle</h1>
         </div>
       </div>
     </section>
