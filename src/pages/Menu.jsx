@@ -55,7 +55,7 @@ const Menu = () => {
       }
 
       // Always fetch fresh data in the background
-      const res = await axios.get('http://localhost:5000/api/products');
+      const res = await axios.get('https://food-backend-bmwx.onrender.com/api/products');
       const data = Array.isArray(res.data) ? res.data : [];
 
       setProducts(data);

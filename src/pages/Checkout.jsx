@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Banknote, Smartphone, CreditCard, ArrowRight, Trash2, Minus, Plus } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = 'https://food-backend-bmwx.onrender.com/api';
 
 const Checkout = () => {
   const { cart, subtotal, removeFromCart, updateQuantity, clearCart } = useCart();
