@@ -1,128 +1,162 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useScroll, useMotionValueEvent } from 'framer-motion';
 
-const HeroVideo = () => {
+const HeroCanvas = () => {
   const containerRef = useRef(null);
+  const canvasRef = useRef(null);
   const videoRef = useRef(null);
-
-  // PERFORMANCE REFS
-  const isRenderingRef = useRef(false);
-  const lastTimeRef = useRef(-1);
-
+  
   const [isReady, setIsReady] = useState(false);
-  const [loadingError, setLoadingError] = useState(false);
+  const lastTimeRef = useRef(-1);
+  const requestRef = useRef();
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end end"]
   });
 
-  // 1. Fetch Video as Blob for zero-latency scrubbing
+  // 1. High-DPI Video-to-Canvas Bridge
   useEffect(() => {
-    const currentVideo = videoRef.current;
-    let objectUrl = null;
-
-    const loadVideo = async () => {
-      try {
-        // NOTE: Use the converted 'burger_scrub.mp4' for best performance
-        const response = await fetch('/burger-video/burger_scrub.mp4');
-        if (!response.ok) throw new Error('Video not found');
-
-        const blob = await response.blob();
-        objectUrl = URL.createObjectURL(blob);
-
-        if (currentVideo) {
-          currentVideo.src = objectUrl;
-          currentVideo.load();
-        }
-      } catch (error) {
-        console.error("Error loading video:", error);
-        setLoadingError(true);
-      }
-    };
-
-    loadVideo();
-
-    return () => {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, []);
-
-  // 2. Optimized Scrubbing Engine
-  useMotionValueEvent(scrollYProgress, "change", (latest) => {
+    const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!video || !isReady || Number.isNaN(video.duration)) return;
+    if (!canvas || !video) return;
 
-    // Map scroll (0-1) to video time
-    const targetTime = latest * video.duration;
+    const context = canvas.getContext('2d', { alpha: false });
+    if (!context) return;
 
-    // Avoid redundant updates and frame-skipping
-    if (!isRenderingRef.current && Math.abs(targetTime - lastTimeRef.current) > 0.01) {
-      isRenderingRef.current = true;
+    // SCRIPT SAFETY: Initialization Wrap
+    try {
+      const dpr = window.devicePixelRatio || 1;
+      const resizeCanvas = () => {
+        if (!canvas) return;
+        canvas.width = window.innerWidth * dpr;
+        canvas.height = window.innerHeight * dpr;
+        context.scale(dpr, dpr);
+        // Draw first frame on resize if ready
+        drawFrame();
+      };
 
-      requestAnimationFrame(() => {
-        if (video) {
-          video.currentTime = targetTime;
-          lastTimeRef.current = targetTime;
+      const drawFrame = () => {
+        try {
+          if (video && video.readyState >= 2 && canvas && context) {
+            const { innerWidth: w, innerHeight: h } = window;
+            const videoRatio = video.videoWidth / video.videoHeight;
+            const screenRatio = w / h;
+
+            let drawW, drawH, offsetX = 0, offsetY = 0;
+
+            if (videoRatio > screenRatio) {
+              drawH = h;
+              drawW = h * videoRatio;
+              offsetX = (w - drawW) / 2;
+            } else {
+              drawW = w;
+              drawH = w / videoRatio;
+              offsetY = (h - drawH) / 2;
+            }
+
+            context.drawImage(video, offsetX, offsetY, drawW, drawH);
+          }
+        } catch (e) {
+          // Non-blocking frame error
         }
-        isRenderingRef.current = false;
-      });
+      };
+
+      const renderLoop = () => {
+        drawFrame();
+        requestRef.current = requestAnimationFrame(renderLoop);
+      };
+
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+      
+      requestRef.current = requestAnimationFrame(renderLoop);
+
+      return () => {
+        window.removeEventListener('resize', resizeCanvas);
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      };
+    } catch (err) {
+      console.error("Video-Canvas Bridge Initialization Failed:", err);
+    }
+  }, [isReady]);
+
+  // 2. Scroll-Sync Engine: Mapping scroll position to video.currentTime
+  useMotionValueEvent(scrollYProgress, "change", (latest) => {
+    try {
+      const video = videoRef.current;
+      if (!video || isNaN(video.duration)) return;
+
+      // Formula: video.currentTime = scrollProgress * video.duration
+      const targetTime = latest * video.duration;
+      
+      if (Math.abs(targetTime - lastTimeRef.current) > 0.001) {
+        video.currentTime = targetTime;
+        lastTimeRef.current = targetTime;
+      }
+    } catch (e) {
+      // Prevent sync errors from crashing the page
     }
   });
 
   return (
     <section
       ref={containerRef}
-      className="relative h-[500vh] bg-[#0a0a0a]"
-      style={{ contain: 'paint' }}
+      id="hero-section"
+      className="relative h-[500vh] bg-[#050505]"
+      style={{ contain: 'paint', zIndex: 0 }}
     >
-      {/* Loading Overlay */}
-      {!isReady && !loadingError && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-          <div className="flex flex-col items-center gap-4">
-            <span className="text-white font-mono text-2xl animate-pulse">
-              PREPARING YOUR ORDER...
-            </span>
-            <div className="w-48 h-1 bg-white/20 rounded-full overflow-hidden">
-              <div className="h-full bg-orange-500 animate-[loading_2s_ease-in-out_infinite]" />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Error State */}
-      {loadingError && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-          <span className="text-red-500 font-mono">Failed to load burger assets.</span>
-        </div>
-      )}
-
-      {/* Video Container */}
-      <div className="sticky top-0 h-screen w-full overflow-hidden flex items-center justify-center">
+      <div className="sticky top-0 h-screen w-full flex items-center justify-center overflow-hidden">
+        {/* Hidden Video Source for Frame Extraction */}
         <video
           ref={videoRef}
-          className="w-full h-full object-cover pointer-events-none"
+          style={{ display: 'none' }}
           muted
           playsInline
+          loop
           preload="auto"
-          onCanPlayThrough={() => setIsReady(true)}
-          style={{
-            willChange: 'transform',
-            filter: 'brightness(0.9)', // Optional: match your cafe vibe
+          onLoadedData={() => setIsReady(true)}
+        >
+          {/* Verified Path: /burger-video/burger_scrub.mp4 */}
+          <source src="/burger-video/burger_scrub.mp4" type="video/mp4" />
+        </video>
+
+        {/* High-DPI Clarity Canvas */}
+        <canvas
+          ref={canvasRef}
+          className="w-full h-full object-cover transition-opacity duration-1000"
+          style={{ 
+            opacity: isReady ? 1 : 0,
+            filter: 'contrast(1.1) brightness(0.9)',
+            zIndex: -1, // Audit: Behind UI, but visible
+            pointerEvents: 'none'
           }}
         />
-      </div>
 
-      {/* Optional: Add content overlays here as you scroll */}
-      <div className="relative z-10 pointer-events-none">
-        <div className="h-screen flex items-center justify-center">
-          <h1 className="text-white text-7xl font-bold opacity-0">Scroll for the Sizzle</h1>
+        {/* Visibility Loader (Only visible until first frame ready) */}
+        {!isReady && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 border-4 border-orange-500/10 border-t-orange-500 rounded-full animate-spin" />
+              <span className="text-orange-500 font-black uppercase tracking-[0.3em] text-xs">Initializing Engine</span>
+            </div>
+          </div>
+        )}
+
+        {/* UI Overlay Content */}
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none px-6">
+          <div className="text-center">
+            <h1 className="text-7xl md:text-9xl font-black italic tracking-tighter text-white leading-none drop-shadow-2xl">
+              BURGER <span className="text-orange-500">FEVER</span>
+            </h1>
+            <p className="text-gray-400 font-bold tracking-[0.4em] uppercase text-xs mt-4">
+              Scroll to witness the sizzle
+            </p>
+          </div>
         </div>
       </div>
     </section>
   );
 };
 
-export default React.memo(HeroVideo);
+export default React.memo(HeroCanvas);

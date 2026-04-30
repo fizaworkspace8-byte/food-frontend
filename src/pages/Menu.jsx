@@ -69,7 +69,7 @@ const Menu = () => {
   }, [products.length]);
 
   return (
-    <div className="pt-32 pb-20 px-[5%] max-w-[1400px] mx-auto min-h-screen">
+    <div className="pt-32 pb-20 px-[5%] max-w-[1400px] mx-auto min-h-screen relative z-[1]">
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -80,7 +80,7 @@ const Menu = () => {
       </motion.div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-        {products.map((product, index) => (
+        {Array.isArray(products) && products.map((product, index) => (
           <ProductCard 
             key={product.id} 
             product={product} 

@@ -33,8 +33,7 @@ const ArticlesSection = () => {
   return (
     <section
       id="articles"
-      className="py-32 px-[5%] bg-black relative z-10 border-t border-white/5"
-      // REMOVED contentVisibility. The browser needs to paint this normally to avoid transition lag.
+      className="py-32 px-[5%] bg-black relative z-[1] border-t border-white/5"
     >
       <div className="max-w-[1400px] w-full mx-auto">
         <div className="flex flex-col md:flex-row justify-between md:items-end gap-10 mb-20">
