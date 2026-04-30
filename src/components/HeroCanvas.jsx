@@ -1,158 +1,140 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useScroll, useMotionValueEvent } from 'framer-motion';
+import { useScroll, useSpring } from 'framer-motion';
 
 const HeroCanvas = () => {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const videoRef = useRef(null);
-  
+
   const [isReady, setIsReady] = useState(false);
-  const lastTimeRef = useRef(-1);
-  const requestRef = useRef();
+  const lastTimeRef = useRef(0);
+  const scrollHistory = useRef([]); // Stabilizer for the middle section
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
     offset: ["start start", "end end"]
   });
 
-  // 1. High-DPI Video-to-Canvas Bridge
+  // Heavy-duty physics for the "Liquid" middle
+  const smoothProgress = useSpring(scrollYProgress, {
+    stiffness: 30,   // Reduced further for maximum "glide"
+    damping: 35,     // High damping to eliminate micro-oscillations
+    restDelta: 0.0001
+  });
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
     if (!canvas || !video) return;
 
-    const context = canvas.getContext('2d', { alpha: false });
-    if (!context) return;
+    const context = canvas.getContext('2d', {
+      alpha: false,
+      desynchronized: true
+    });
 
-    // SCRIPT SAFETY: Initialization Wrap
-    try {
-      const dpr = window.devicePixelRatio || 1;
-      const resizeCanvas = () => {
-        if (!canvas) return;
-        canvas.width = window.innerWidth * dpr;
-        canvas.height = window.innerHeight * dpr;
-        context.scale(dpr, dpr);
-        // Draw first frame on resize if ready
-        drawFrame();
-      };
+    const render = () => {
+      if (video.readyState >= 2 && !isNaN(video.duration)) {
+        const raw = scrollYProgress.get();
+        const smoothed = smoothProgress.get();
 
-      const drawFrame = () => {
-        try {
-          if (video && video.readyState >= 2 && canvas && context) {
-            const { innerWidth: w, innerHeight: h } = window;
-            const videoRatio = video.videoWidth / video.videoHeight;
-            const screenRatio = w / h;
+        // 1. THE STABILIZER ENGINE
+        // We keep a small history of scroll values to calculate a moving average.
+        // This completely removes "jitter" from mouse wheels or trackpads.
+        scrollHistory.current.push(smoothed);
+        if (scrollHistory.current.length > 5) scrollHistory.current.shift();
+        const stabilizedProgress = scrollHistory.current.reduce((a, b) => a + b) / scrollHistory.current.length;
 
-            let drawW, drawH, offsetX = 0, offsetY = 0;
-
-            if (videoRatio > screenRatio) {
-              drawH = h;
-              drawW = h * videoRatio;
-              offsetX = (w - drawW) / 2;
-            } else {
-              drawW = w;
-              drawH = w / videoRatio;
-              offsetY = (h - drawH) / 2;
-            }
-
-            context.drawImage(video, offsetX, offsetY, drawW, drawH);
-          }
-        } catch (e) {
-          // Non-blocking frame error
+        // 2. THE DYNAMIC BRIDGE
+        // 0-30%: Raw 1:1 input (The "Electric Start" you loved)
+        // 30-100%: Stabilized Glide (The "Liquid Middle")
+        let activeProgress;
+        if (raw < 0.30) {
+          activeProgress = raw;
+        } else {
+          const t = Math.min((raw - 0.30) / 0.20, 1); // 20% transition zone
+          activeProgress = raw * (1 - t) + stabilizedProgress * t;
         }
-      };
 
-      const renderLoop = () => {
-        drawFrame();
-        requestRef.current = requestAnimationFrame(renderLoop);
-      };
+        // 3. VARIABLE SEEK VELOCITY
+        // Instant response at the start, weighted "Honey" feel in the middle
+        const seekVelocity = raw < 0.30 ? 0.98 : 0.10;
 
-      window.addEventListener('resize', resizeCanvas);
-      resizeCanvas();
-      
-      requestRef.current = requestAnimationFrame(renderLoop);
+        const targetTime = activeProgress * (video.duration - 0.15);
+        const nextTime = lastTimeRef.current + (targetTime - lastTimeRef.current) * seekVelocity;
 
-      return () => {
-        window.removeEventListener('resize', resizeCanvas);
-        if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      };
-    } catch (err) {
-      console.error("Video-Canvas Bridge Initialization Failed:", err);
-    }
+        if (Math.abs(nextTime - video.currentTime) > 0.0005) {
+          video.currentTime = nextTime;
+        }
+        lastTimeRef.current = nextTime;
+
+        // 4. DRAWING
+        const { innerWidth: w, innerHeight: h } = window;
+        const vW = video.videoWidth;
+        const vH = video.videoHeight;
+        const scale = Math.max(w / vW, h / vH);
+        const x = (w - vW * scale) / 2;
+        const y = (h - vH * scale) / 2;
+
+        context.drawImage(video, x, y, vW * scale, vH * scale);
+      }
+      requestAnimationFrame(render);
+    };
+
+    const handleResize = () => {
+      // 1.5 DPR is the gold standard for performance vs. quality balance
+      const dpr = Math.min(window.devicePixelRatio, 1.5);
+      canvas.width = window.innerWidth * dpr;
+      canvas.height = window.innerHeight * dpr;
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
+      context.scale(dpr, dpr);
+    };
+
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    const animId = requestAnimationFrame(render);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animId);
+    };
   }, [isReady]);
 
-  // 2. Scroll-Sync Engine: Mapping scroll position to video.currentTime
-  useMotionValueEvent(scrollYProgress, "change", (latest) => {
-    try {
-      const video = videoRef.current;
-      if (!video || isNaN(video.duration)) return;
-
-      // Formula: video.currentTime = scrollProgress * video.duration
-      const targetTime = latest * video.duration;
-      
-      if (Math.abs(targetTime - lastTimeRef.current) > 0.001) {
-        video.currentTime = targetTime;
-        lastTimeRef.current = targetTime;
-      }
-    } catch (e) {
-      // Prevent sync errors from crashing the page
-    }
-  });
-
   return (
-    <section
-      ref={containerRef}
-      id="hero-section"
-      className="relative h-[500vh] bg-[#050505]"
-      style={{ contain: 'paint', zIndex: 0 }}
-    >
+    <section ref={containerRef} className="relative h-[1000vh] bg-[#050505]">
       <div className="sticky top-0 h-screen w-full flex items-center justify-center overflow-hidden">
-        {/* Hidden Video Source for Frame Extraction */}
+
         <video
           ref={videoRef}
-          style={{ display: 'none' }}
+          className="hidden"
           muted
           playsInline
-          loop
           preload="auto"
           onLoadedData={() => setIsReady(true)}
         >
-          {/* Verified Path: /burger-video/burger_scrub.mp4 */}
-          <source src="/burger-video/burger_scrub.mp4" type="video/mp4" />
+          <source src="/burger-video/compressed_burger.mp4" type="video/mp4" />
         </video>
 
-        {/* High-DPI Clarity Canvas */}
         <canvas
           ref={canvasRef}
-          className="w-full h-full object-cover transition-opacity duration-1000"
-          style={{ 
+          style={{
             opacity: isReady ? 1 : 0,
-            filter: 'contrast(1.1) brightness(0.9)',
-            zIndex: -1, // Audit: Behind UI, but visible
-            pointerEvents: 'none'
+            zIndex: -1,
+            pointerEvents: 'none',
+            willChange: 'transform'
           }}
         />
 
-        {/* Visibility Loader (Only visible until first frame ready) */}
         {!isReady && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-16 h-16 border-4 border-orange-500/10 border-t-orange-500 rounded-full animate-spin" />
-              <span className="text-orange-500 font-black uppercase tracking-[0.3em] text-xs">Initializing Engine</span>
-            </div>
+          <div className="absolute inset-0 flex items-center justify-center bg-black z-50">
+            <div className="w-8 h-8 border-t-2 border-orange-500 rounded-full animate-spin" />
           </div>
         )}
 
-        {/* UI Overlay Content */}
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none px-6">
-          <div className="text-center">
-            <h1 className="text-7xl md:text-9xl font-black italic tracking-tighter text-white leading-none drop-shadow-2xl">
-              BURGER <span className="text-orange-500">FEVER</span>
-            </h1>
-            <p className="text-gray-400 font-bold tracking-[0.4em] uppercase text-xs mt-4">
-              Scroll to witness the sizzle
-            </p>
-          </div>
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center pointer-events-none text-center px-4">
+          <h1 className="text-8xl md:text-9xl font-black italic text-white drop-shadow-2xl uppercase tracking-tighter">
+            Burger <span className="text-orange-500">Fever</span>
+          </h1>
         </div>
       </div>
     </section>
